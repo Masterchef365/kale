@@ -48,7 +48,7 @@ impl App for KaleApp {
         let m = 0.5;
 
         for _ in 0..40 {
-            self.sim.step(0.5 * m, 0.5 * m, 0.05 * m);
+            self.sim.step(0.5 * m, 0.5 * m, 0.1 * m);
         }
 
         let (vertices, _) = leaf_mesh(self.sim.data(), LEAF_SCALE);
