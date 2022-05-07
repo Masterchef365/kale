@@ -1,8 +1,12 @@
 use idek::{prelude::*, IndexBuffer, MultiPlatformCamera};
 use idek_basics::{
-    idek::{self, nalgebra::Vector2},
+    idek::{
+        self,
+        nalgebra::{Vector2, Vector3},
+    },
     Array2D,
 };
+use rand::{distributions::Uniform, prelude::*};
 
 fn main() -> Result<()> {
     launch::<_, KaleApp>(Settings::default().vr_if_any_args())
@@ -21,7 +25,8 @@ const LEAF_SCALE: f32 = 3.;
 impl App for KaleApp {
     fn init(ctx: &mut Context, platform: &mut Platform, _: ()) -> Result<Self> {
         let w = 50;
-        let sim = Simulation::new(w, w);
+        let z = 200.5;
+        let sim = Simulation::new(w, w, z, rand::thread_rng(), |x, _y| x * 1.5 + 1.);
 
         let (vertices, indices) = leaf_mesh(sim.data(), LEAF_SCALE);
 
@@ -39,7 +44,7 @@ impl App for KaleApp {
     }
 
     fn frame(&mut self, ctx: &mut Context, _: &mut Platform) -> Result<Vec<DrawCmd>> {
-        self.sim.step(0.1);
+        self.sim.step(0.05, 0.01);
 
         let (vertices, _) = leaf_mesh(self.sim.data(), LEAF_SCALE);
         ctx.update_vertices(self.verts, &vertices)?;
@@ -65,7 +70,7 @@ impl App for KaleApp {
 
 #[derive(Default, Copy, Clone)]
 struct Node {
-    pos: Vector2<f32>,
+    pos: Vector3<f32>,
     dens: f32,
 }
 
@@ -79,48 +84,71 @@ struct Simulation {
 }
 
 impl Simulation {
-    pub fn new(width: usize, height: usize) -> Self {
+    pub fn new(
+        width: usize,
+        height: usize,
+        z_init: f32,
+        mut rng: impl Rng,
+        dens: fn(f32, f32) -> f32,
+    ) -> Self {
+        let z = Uniform::new(-z_init, z_init);
+
         let mut leaf = Leaf::new(width, height);
         for y in 0..leaf.height() {
             for x in 0..leaf.width() {
                 leaf[(x, y)] = Node {
-                    pos: Vector2::new(x as f32, y as f32),
-                    dens: x as f32 / width as f32 + 1.,
+                    pos: Vector3::new(x as f32, z.sample(&mut rng), y as f32),
+                    dens: dens(x as f32 / width as f32, y as f32 / height as f32),
                 };
             }
         }
 
-        Self { front: leaf.clone(), back: leaf }
+        Self {
+            front: leaf.clone(),
+            back: leaf,
+        }
     }
 
-    pub fn step(&mut self, dt: f32) {
+    pub fn step(&mut self, spring: f32, restore: f32) {
         for y in 0..self.front.height() {
             for x in 0..self.front.width() {
                 let node = self.front[(x, y)];
 
-                let offsets = [
-                    (-1, 0),
-                    (1, 0),
-                    (0, 1),
-                    (0, -1),
-                ];
+                let offsets = [(-1, 0), (1, 0), (0, 1), (0, -1)];
 
-                let mut sum = Vector2::zeros();
+                let mut sum = Vector3::zeros();
+
+                let mut middle = Vector3::zeros();
+
+                let mut n_neighbors = 0;
 
                 for (ox, oy) in offsets {
                     let grid_off = (ox + x as isize, oy + y as isize);
                     if let Some(pos) = self.front.bound(grid_off) {
                         let sample = self.front[pos];
-                        let diff = node.pos - sample.pos;
+                        let mut diff = node.pos - sample.pos;
+                        diff.y /= 18.;
+
                         let mag = diff.magnitude();
+
                         let n = diff.normalize();
 
+                        middle += sample.pos;
+
                         sum += (node.dens - mag) * n;
+
+                        n_neighbors += 1;
                     }
                 }
 
+                let middle = middle / n_neighbors as f32;
+
                 let mut result = node;
-                result.pos += sum * dt / 4.;
+                result.pos += sum * spring / n_neighbors as f32;
+
+                if n_neighbors == 4 {
+                    result.pos += restore * (middle - node.pos);
+                }
 
                 self.back[(x, y)] = result;
             }
@@ -140,9 +168,15 @@ fn leaf_mesh(leaf: &Leaf, scale: f32) -> (Vec<Vertex>, Vec<u32>) {
         .data()
         .iter()
         .map(|node| {
-            let pos = (node.pos / max) * 2. - Vector2::new(1., 1.);
-            let pos = pos * scale;
-            Vertex::new([pos.x, 0., pos.y], [node.dens - 1., 1., node.dens - 1.])
+            let pos = node.pos / max;
+            Vertex::new(
+                [
+                    scale * (pos.x * 2. - 1.),
+                    scale * pos.y / max,
+                    scale * (pos.z * 2. - 1.),
+                ],
+                [node.dens - 1., 1., node.dens - 1.],
+            )
         })
         .collect();
 

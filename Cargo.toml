@@ -5,3 +5,4 @@ edition = "2021"
 
 [dependencies]
 idek_basics = { path = "../idek_basics" }
+rand = "0.8"
