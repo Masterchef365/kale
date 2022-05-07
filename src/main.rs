@@ -24,7 +24,7 @@ impl App for KaleApp {
         let w = 50;
         let z = 0.01;
 
-        //let f = |x, y| ((x * 2. - 1.) + (y * 2. - 1.)).abs() + 1.0;
+        //let f = |x: f32, y: f32| ((x * 2. - 1.) + (y * 2. - 1.)).abs() * 2. + 0.0;
         let f = |x, y| x * 1.5 + 1.;
 
         let sim = Simulation::new(w, w, z, rand::thread_rng(), f);
@@ -48,7 +48,7 @@ impl App for KaleApp {
         let m = 0.5;
 
         for _ in 0..40 {
-            self.sim.step(0.5 * m, 0.1 * m, 0.1 * m);
+            self.sim.step(0.5 * m, 0.5 * m, 0.05 * m);
         }
 
         let (vertices, _) = leaf_mesh(self.sim.data(), LEAF_SCALE);
