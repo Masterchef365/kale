@@ -1,9 +1,6 @@
 use idek::{prelude::*, IndexBuffer, MultiPlatformCamera};
 use idek_basics::{
-    idek::{
-        self,
-        nalgebra::{Vector2, Vector3},
-    },
+    idek::{self, nalgebra::Vector3},
     Array2D,
 };
 use rand::{distributions::Uniform, prelude::*};
@@ -25,7 +22,7 @@ const LEAF_SCALE: f32 = 3.;
 impl App for KaleApp {
     fn init(ctx: &mut Context, platform: &mut Platform, _: ()) -> Result<Self> {
         let w = 50;
-        let z = 200.5;
+        let z = 20.5;
         let sim = Simulation::new(w, w, z, rand::thread_rng(), |x, _y| x * 1.5 + 1.);
 
         let (vertices, indices) = leaf_mesh(sim.data(), LEAF_SCALE);
@@ -44,7 +41,9 @@ impl App for KaleApp {
     }
 
     fn frame(&mut self, ctx: &mut Context, _: &mut Platform) -> Result<Vec<DrawCmd>> {
-        self.sim.step(0.05, 0.01);
+        let m = 1.2;
+
+        self.sim.step(0.5 * m, 0.1 * m, 0.1 * m);
 
         let (vertices, _) = leaf_mesh(self.sim.data(), LEAF_SCALE);
         ctx.update_vertices(self.verts, &vertices)?;
@@ -109,7 +108,7 @@ impl Simulation {
         }
     }
 
-    pub fn step(&mut self, spring: f32, restore: f32) {
+    pub fn step(&mut self, spring: f32, restore: f32, square: f32) {
         for y in 0..self.front.height() {
             for x in 0..self.front.width() {
                 let node = self.front[(x, y)];
@@ -122,12 +121,15 @@ impl Simulation {
 
                 let mut n_neighbors = 0;
 
-                for (ox, oy) in offsets {
-                    let grid_off = (ox + x as isize, oy + y as isize);
+                fn add_uv((x, y): (usize, usize), (ox, oy): (isize, isize)) -> (isize, isize) {
+                    (ox + x as isize, oy + y as isize)
+                }
+
+                for off in offsets {
+                    let grid_off = add_uv((x, y), off);
                     if let Some(pos) = self.front.bound(grid_off) {
                         let sample = self.front[pos];
-                        let mut diff = node.pos - sample.pos;
-                        diff.y /= 18.;
+                        let diff = node.pos - sample.pos;
 
                         let mag = diff.magnitude();
 
@@ -144,10 +146,40 @@ impl Simulation {
                 let middle = middle / n_neighbors as f32;
 
                 let mut result = node;
+
                 result.pos += sum * spring / n_neighbors as f32;
 
                 if n_neighbors == 4 {
                     result.pos += restore * (middle - node.pos);
+                }
+
+                let pairs = [(-1, 0), (1, 0), (0, 1), (0, -1), (-1, 0)];
+
+                let mut n_pairs = 0;
+
+                let mut avg_sq = Vector3::zeros();
+
+                for pair in pairs.windows(2) {
+                    let a = self.front.bound(add_uv((x, y), pair[0]));
+                    let b = self.front.bound(add_uv((x, y), pair[1]));
+                    if let Some((a, b)) = a.zip(b) {
+                        let a = self.front[a].pos;
+                        let b = self.front[b].pos;
+
+                        let avg = (a + b) / 2.;
+                        let diff = avg - node.pos;
+                        let mag = diff.magnitude();
+                        let r = (a - b).magnitude() / 2.;
+
+                        avg_sq += diff.normalize() * (mag - r);
+
+                        n_pairs += 1;
+                    }
+                }
+
+                if n_pairs == 4 {
+                    avg_sq /= n_pairs as f32;
+                    result.pos += avg_sq * square;
                 }
 
                 self.back[(x, y)] = result;
