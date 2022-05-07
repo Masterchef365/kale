@@ -39,8 +39,9 @@ impl App for KaleApp {
     }
 
     fn frame(&mut self, ctx: &mut Context, _: &mut Platform) -> Result<Vec<DrawCmd>> {
-        let (vertices, _) = leaf_mesh(self.sim.data(), LEAF_SCALE);
+        self.sim.step(0.1);
 
+        let (vertices, _) = leaf_mesh(self.sim.data(), LEAF_SCALE);
         ctx.update_vertices(self.verts, &vertices)?;
 
         Ok(vec![DrawCmd::new(self.verts)
@@ -71,7 +72,10 @@ struct Node {
 type Leaf = Array2D<Node>;
 
 struct Simulation {
-    leaf: Leaf,
+    /// The buffer presented next to the user, and read from during step
+    front: Leaf,
+    /// The buffer written to during a step
+    back: Leaf,
 }
 
 impl Simulation {
@@ -86,11 +90,47 @@ impl Simulation {
             }
         }
 
-        Self { leaf }
+        Self { front: leaf.clone(), back: leaf }
+    }
+
+    pub fn step(&mut self, dt: f32) {
+        for y in 0..self.front.height() {
+            for x in 0..self.front.width() {
+                let node = self.front[(x, y)];
+
+                let offsets = [
+                    (-1, 0),
+                    (1, 0),
+                    (0, 1),
+                    (0, -1),
+                ];
+
+                let mut sum = Vector2::zeros();
+
+                for (ox, oy) in offsets {
+                    let grid_off = (ox + x as isize, oy + y as isize);
+                    if let Some(pos) = self.front.bound(grid_off) {
+                        let sample = self.front[pos];
+                        let diff = node.pos - sample.pos;
+                        let mag = diff.magnitude();
+                        let n = diff.normalize();
+
+                        sum += (node.dens - mag) * n;
+                    }
+                }
+
+                let mut result = node;
+                result.pos += sum * dt / 4.;
+
+                self.back[(x, y)] = result;
+            }
+        }
+
+        std::mem::swap(&mut self.front, &mut self.back);
     }
 
     fn data(&self) -> &Leaf {
-        &self.leaf
+        &self.front
     }
 }
 
@@ -127,5 +167,3 @@ fn leaf_mesh(leaf: &Leaf, scale: f32) -> (Vec<Vertex>, Vec<u32>) {
 
     (vertices, indices)
 }
-
-fn neighbor_visitor<T>() {}
