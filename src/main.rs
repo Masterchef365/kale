@@ -22,7 +22,7 @@ const LEAF_SCALE: f32 = 3.;
 impl App for KaleApp {
     fn init(ctx: &mut Context, platform: &mut Platform, _: ()) -> Result<Self> {
         let w = 50;
-        let z = 20.5;
+        let z = 1.5;
         let sim = Simulation::new(w, w, z, rand::thread_rng(), |x, _y| x * 1.5 + 1.);
 
         let (vertices, indices) = leaf_mesh(sim.data(), LEAF_SCALE);
@@ -41,7 +41,7 @@ impl App for KaleApp {
     }
 
     fn frame(&mut self, ctx: &mut Context, _: &mut Platform) -> Result<Vec<DrawCmd>> {
-        let m = 1.2;
+        let m = 1.5;
 
         self.sim.step(0.5 * m, 0.1 * m, 0.1 * m);
 
@@ -204,7 +204,7 @@ fn leaf_mesh(leaf: &Leaf, scale: f32) -> (Vec<Vertex>, Vec<u32>) {
             Vertex::new(
                 [
                     scale * (pos.x * 2. - 1.),
-                    scale * pos.y / max,
+                    scale * pos.y,
                     scale * (pos.z * 2. - 1.),
                 ],
                 [node.dens - 1., 1., node.dens - 1.],
