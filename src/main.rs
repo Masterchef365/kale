@@ -22,8 +22,12 @@ const LEAF_SCALE: f32 = 3.;
 impl App for KaleApp {
     fn init(ctx: &mut Context, platform: &mut Platform, _: ()) -> Result<Self> {
         let w = 50;
-        let z = 1.5;
-        let sim = Simulation::new(w, w, z, rand::thread_rng(), |x, _y| x * 1.5 + 1.);
+        let z = 0.01;
+
+        //let f = |x, y| ((x * 2. - 1.) + (y * 2. - 1.)).abs() + 1.0;
+        let f = |x, y| x * 1.5 + 1.;
+
+        let sim = Simulation::new(w, w, z, rand::thread_rng(), f);
 
         let (vertices, indices) = leaf_mesh(sim.data(), LEAF_SCALE);
 
@@ -41,9 +45,11 @@ impl App for KaleApp {
     }
 
     fn frame(&mut self, ctx: &mut Context, _: &mut Platform) -> Result<Vec<DrawCmd>> {
-        let m = 1.5;
+        let m = 0.5;
 
-        self.sim.step(0.5 * m, 0.1 * m, 0.1 * m);
+        for _ in 0..40 {
+            self.sim.step(0.5 * m, 0.1 * m, 0.1 * m);
+        }
 
         let (vertices, _) = leaf_mesh(self.sim.data(), LEAF_SCALE);
         ctx.update_vertices(self.verts, &vertices)?;
@@ -110,7 +116,7 @@ impl Simulation {
 
     pub fn step(&mut self, spring: f32, restore: f32, square: f32) {
         for y in 0..self.front.height() {
-            for x in 0..self.front.width() {
+            for x in 1..self.front.width() {
                 let node = self.front[(x, y)];
 
                 let offsets = [(-1, 0), (1, 0), (0, 1), (0, -1)];
@@ -172,7 +178,6 @@ impl Simulation {
                         let r = (a - b).magnitude() / 2.;
 
                         avg_sq += diff.normalize() * (mag - r);
-
                         n_pairs += 1;
                     }
                 }
